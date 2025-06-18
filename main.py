@@ -2,11 +2,13 @@ import os
 import tempfile
 import zipfile
 import shutil
+import base64
+import io
 from pathlib import Path
 from typing import List
 import pandas as pd
 from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -27,7 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global storage for processed files
+# Global storage for processed files (Note: This won't persist across serverless function calls)
 processed_files = {}
 
 def find_csv_files(directory: Path) -> List[Path]:
@@ -203,21 +205,24 @@ async def upload_folder(file: UploadFile = File(...)):
         # Merge CSV files
         merged_df = merge_csv_files(csv_files)
         
-        # Create Excel file
-        excel_filename = "merged_data.xlsx"
-        excel_path = os.path.join(temp_dir, excel_filename)
-        
-        # Save to Excel with proper encoding
-        with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
+        # Create Excel file in memory
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
             merged_df.to_excel(writer, index=False, sheet_name='Merged Data')
         
-        # Store file info for download
+        # Get the Excel data as bytes
+        excel_data = excel_buffer.getvalue()
+        
+        # Store file info for download (using base64 for Vercel compatibility)
         file_id = f"temp_{len(processed_files)}"
         processed_files[file_id] = {
-            'path': excel_path,
-            'filename': excel_filename,
-            'temp_dir': temp_dir
+            'data': base64.b64encode(excel_data).decode('utf-8'),
+            'filename': 'merged_data.xlsx',
+            'size': len(excel_data)
         }
+        
+        # Clean up temp directory
+        shutil.rmtree(temp_dir, ignore_errors=True)
         
         return {
             'success': True, 
@@ -241,21 +246,25 @@ async def download_excel(file_id: str):
     
     file_info = processed_files[file_id]
     
-    if not os.path.exists(file_info['path']):
-        raise HTTPException(status_code=404, detail="File no longer available")
+    # Decode base64 data
+    try:
+        excel_data = base64.b64decode(file_info['data'])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error decoding file data")
     
-    return FileResponse(
-        path=file_info['path'],
-        filename=file_info['filename'],
-        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    return Response(
+        content=excel_data,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={
+            'Content-Disposition': f'attachment; filename="{file_info["filename"]}"',
+            'Content-Length': str(file_info['size'])
+        }
     )
 
 @app.delete("/api/cleanup/{file_id}")
 async def cleanup_file(file_id: str):
     """Clean up temporary files after download."""
     if file_id in processed_files:
-        file_info = processed_files[file_id]
-        shutil.rmtree(file_info['temp_dir'], ignore_errors=True)
         del processed_files[file_id]
         return {'success': True, 'message': 'File cleaned up successfully'}
     
@@ -266,8 +275,15 @@ async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "message": "CSV to Excel Converter API is running"}
 
-# Serve React frontend
-app.mount("/", StaticFiles(directory=".", html=True), name="static")
+@app.get("/", response_class=HTMLResponse)
+async def read_root():
+    """Serve the main HTML page."""
+    try:
+        with open("index.html", "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    except FileNotFoundError:
+        return HTMLResponse(content="<h1>CSV to Excel Converter</h1><p>Frontend not found</p>")
 
+# For local development only
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=5000)
