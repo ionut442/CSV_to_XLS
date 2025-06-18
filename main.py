@@ -41,19 +41,49 @@ def find_csv_files(directory: Path) -> List[Path]:
 
 def read_csv_with_vietnamese_support(file_path: Path) -> pd.DataFrame:
     """Read CSV file with proper Vietnamese character support."""
-    try:
-        # Try UTF-8 with BOM first (most common for Vietnamese)
-        df = pd.read_csv(file_path, encoding='utf-8-sig')
-        return df
-    except UnicodeDecodeError:
+    encodings = ['utf-8-sig', 'utf-8', 'cp1252', 'latin1']
+    
+    for encoding in encodings:
         try:
-            # Fallback to regular UTF-8
-            df = pd.read_csv(file_path, encoding='utf-8')
+            # Read with error handling for inconsistent field counts
+            df = pd.read_csv(
+                file_path, 
+                encoding=encoding,
+                on_bad_lines='skip',  # Skip malformed lines
+                engine='python',     # Use Python engine for better error handling
+                sep=',',             # Explicitly set separator
+                quotechar='"',       # Handle quoted fields
+                skipinitialspace=True # Skip spaces after delimiter
+            )
+            
+            # Check if we got any data
+            if not df.empty:
+                logger.info(f"Successfully read {file_path} with encoding {encoding}, shape: {df.shape}")
+                return df
+            
+        except (UnicodeDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
+            logger.warning(f"Failed to read {file_path} with encoding {encoding}: {str(e)}")
+            continue
+    
+    # If all encodings fail, try one more time with more permissive settings
+    try:
+        df = pd.read_csv(
+            file_path,
+            encoding='utf-8-sig',
+            on_bad_lines='skip',
+            engine='python',
+            sep=None,  # Let pandas auto-detect separator
+            header=0
+        )
+        if not df.empty:
+            logger.info(f"Successfully read {file_path} with auto-detection, shape: {df.shape}")
             return df
-        except UnicodeDecodeError:
-            # Final fallback to Windows-1252 (sometimes used for Vietnamese)
-            df = pd.read_csv(file_path, encoding='cp1252')
-            return df
+    except Exception as e:
+        logger.error(f"Final attempt failed for {file_path}: {str(e)}")
+    
+    # Return empty DataFrame if all attempts fail
+    logger.error(f"Could not read {file_path} with any method")
+    return pd.DataFrame()
 
 def merge_csv_files(csv_files: List[Path]) -> pd.DataFrame:
     """Merge multiple CSV files with same headers into one DataFrame."""
@@ -62,6 +92,7 @@ def merge_csv_files(csv_files: List[Path]) -> pd.DataFrame:
     
     dataframes = []
     header_reference = None
+    successful_files = 0
     
     for csv_file in csv_files:
         try:
@@ -69,44 +100,79 @@ def merge_csv_files(csv_files: List[Path]) -> pd.DataFrame:
             df = read_csv_with_vietnamese_support(csv_file)
             
             if df.empty:
-                logger.warning(f"Empty CSV file: {csv_file}")
+                logger.warning(f"Empty or unreadable CSV file: {csv_file}")
                 continue
-                
+            
+            # Clean column names (remove extra spaces, etc.)
+            df.columns = df.columns.str.strip()
+            
             # Check if headers match (for first file, set as reference)
             if header_reference is None:
                 header_reference = list(df.columns)
-                logger.info(f"Reference headers: {header_reference}")
+                logger.info(f"Reference headers ({len(header_reference)} columns): {header_reference}")
+                dataframes.append(df)
+                successful_files += 1
             else:
                 current_headers = list(df.columns)
-                if current_headers != header_reference:
-                    logger.warning(f"Header mismatch in {csv_file}. Expected: {header_reference}, Got: {current_headers}")
-                    # Try to align columns or skip this file
-                    continue
-            
-            dataframes.append(df)
+                
+                # Try to match headers with some flexibility
+                if len(current_headers) == len(header_reference):
+                    # Same number of columns, assume they match
+                    df.columns = header_reference  # Align column names
+                    dataframes.append(df)
+                    successful_files += 1
+                    logger.info(f"Added file {csv_file} with aligned headers")
+                elif set(current_headers).issubset(set(header_reference)):
+                    # Current file has subset of reference headers
+                    df_aligned = df.reindex(columns=header_reference, fill_value='')
+                    dataframes.append(df_aligned)
+                    successful_files += 1
+                    logger.info(f"Added file {csv_file} with subset headers, filled missing columns")
+                elif set(header_reference).issubset(set(current_headers)):
+                    # Current file has superset of reference headers
+                    df_subset = df[header_reference]
+                    dataframes.append(df_subset)
+                    successful_files += 1
+                    logger.info(f"Added file {csv_file} with superset headers, selected matching columns")
+                else:
+                    # Try to find common columns
+                    common_columns = list(set(header_reference) & set(current_headers))
+                    if len(common_columns) >= len(header_reference) * 0.7:  # At least 70% match
+                        # Update reference to common columns for all dataframes
+                        header_reference = common_columns
+                        # Reprocess existing dataframes
+                        dataframes = [existing_df[common_columns] for existing_df in dataframes]
+                        df_common = df[common_columns]
+                        dataframes.append(df_common)
+                        successful_files += 1
+                        logger.info(f"Updated reference headers to common columns ({len(common_columns)}): {common_columns}")
+                    else:
+                        logger.warning(f"Header mismatch in {csv_file}. Expected: {header_reference}, Got: {current_headers}. Skipping file.")
+                        continue
             
         except Exception as e:
             logger.error(f"Error processing {csv_file}: {str(e)}")
             continue
     
     if not dataframes:
-        raise ValueError("No valid CSV files could be processed")
+        raise ValueError("No valid CSV files could be processed. Check that files have consistent structure and valid encoding.")
     
     # Concatenate all dataframes
     merged_df = pd.concat(dataframes, ignore_index=True)
-    logger.info(f"Merged {len(dataframes)} CSV files into {len(merged_df)} rows")
+    logger.info(f"Successfully merged {successful_files} out of {len(csv_files)} CSV files into {len(merged_df)} rows with {len(merged_df.columns)} columns")
     
     return merged_df
 
 @app.post("/api/upload")
 async def upload_folder(file: UploadFile = File(...)):
     """Upload and process folder containing CSV files."""
-    if not file.filename.endswith('.zip'):
+    filename = file.filename or "upload.zip"
+    if not filename.endswith('.zip'):
         raise HTTPException(status_code=400, detail="Please upload a ZIP file containing your folder structure")
     
     # Create temporary directory for processing
     temp_dir = tempfile.mkdtemp()
-    zip_path = os.path.join(temp_dir, file.filename)
+    zip_path = os.path.join(temp_dir, filename)
     extract_dir = os.path.join(temp_dir, "extracted")
     
     try:
