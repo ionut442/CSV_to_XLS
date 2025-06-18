@@ -15,16 +15,16 @@
 </head>
 <body>
     <div id="root"></div>
-    
+
     <script type="text/babel">
         const { useState, useEffect } = React;
-        
+
         // API utility functions
         const api = {
             uploadFolder: async (file) => {
                 const formData = new FormData();
                 formData.append('file', file);
-                
+
                 const response = await axios.post('/api/upload', formData, {
                     headers: {
                         'Content-Type': 'multipart/form-data',
@@ -32,14 +32,14 @@
                 });
                 return response.data;
             },
-            
+
             downloadFile: async (fileId) => {
                 const response = await axios.get(`/api/download/${fileId}`, {
                     responseType: 'blob',
                 });
                 return response.data;
             },
-            
+
             cleanupFile: async (fileId) => {
                 await axios.delete(`/api/cleanup/${fileId}`);
             }
@@ -48,7 +48,7 @@
         // Processing Status Component
         const ProcessingStatus = ({ status, progress, message, error }) => {
             if (status === 'idle') return null;
-            
+
             return (
                 <div className="mt-6 p-4 rounded-lg border">
                     {status === 'processing' && (
@@ -60,7 +60,7 @@
                             </div>
                         </div>
                     )}
-                    
+
                     {status === 'success' && (
                         <div className="flex items-center space-x-3">
                             <div className="flex-shrink-0">
@@ -72,7 +72,7 @@
                             </div>
                         </div>
                     )}
-                    
+
                     {status === 'error' && (
                         <div className="flex items-center space-x-3">
                             <div className="flex-shrink-0">
@@ -91,24 +91,24 @@
         // File Upload Component
         const FileUpload = ({ onUpload, processing }) => {
             const [dragOver, setDragOver] = useState(false);
-            
+
             const handleDrop = (e) => {
                 e.preventDefault();
                 setDragOver(false);
-                
+
                 const files = e.dataTransfer.files;
                 if (files.length > 0) {
                     onUpload(files[0]);
                 }
             };
-            
+
             const handleFileSelect = (e) => {
                 const files = e.target.files;
                 if (files.length > 0) {
                     onUpload(files[0]);
                 }
             };
-            
+
             return (
                 <div
                     className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
@@ -166,23 +166,23 @@
             const [error, setError] = useState('');
             const [fileId, setFileId] = useState(null);
             const [downloadReady, setDownloadReady] = useState(false);
-            
+
             useEffect(() => {
                 // Initialize Feather icons
                 if (window.feather) {
                     window.feather.replace();
                 }
             });
-            
+
             const handleUpload = async (file) => {
                 setStatus('processing');
                 setMessage('Uploading and extracting files...');
                 setError('');
                 setDownloadReady(false);
-                
+
                 try {
                     const result = await api.uploadFolder(file);
-                    
+
                     if (result.success) {
                         setStatus('success');
                         setMessage(`Processed ${result.csv_count} CSV files with ${result.row_count} total rows`);
@@ -203,13 +203,13 @@
                     }, 100);
                 }
             };
-            
+
             const handleDownload = async () => {
                 if (!fileId) return;
-                
+
                 try {
                     const blob = await api.downloadFile(fileId);
-                    
+
                     // Create download link
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -220,21 +220,21 @@
                     a.click();
                     window.URL.revokeObjectURL(url);
                     document.body.removeChild(a);
-                    
+
                     // Cleanup server file
                     await api.cleanupFile(fileId);
-                    
+
                     // Reset state
                     setStatus('idle');
                     setFileId(null);
                     setDownloadReady(false);
                     setMessage('');
-                    
+
                 } catch (err) {
                     setError('Failed to download file: ' + (err.message || 'Unknown error'));
                 }
             };
-            
+
             const resetApp = () => {
                 setStatus('idle');
                 setMessage('');
@@ -242,7 +242,7 @@
                 setFileId(null);
                 setDownloadReady(false);
             };
-            
+
             return (
                 <div className="min-h-screen bg-gray-50 py-8">
                     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -255,7 +255,7 @@
                                 Upload folders containing CSV files and merge them into a single Excel file
                             </p>
                         </div>
-                        
+
                         {/* Main Content */}
                         <div className="bg-white rounded-lg shadow-sm p-6">
                             {!downloadReady ? (
@@ -288,14 +288,14 @@
                                     </div>
                                 </div>
                             )}
-                            
+
                             <ProcessingStatus 
                                 status={status}
                                 message={message}
                                 error={error}
                             />
                         </div>
-                        
+
                         {/* Instructions */}
                         <div className="mt-8 bg-blue-50 rounded-lg p-6">
                             <h3 className="text-lg font-medium text-blue-900 mb-4">How to use:</h3>
@@ -316,9 +316,10 @@
                 </div>
             );
         };
-        
-        // Render the app
-        ReactDOM.render(<App />, document.getElementById('root'));
+
+        // Render the app using React 18 createRoot API
+            const root = ReactDOM.createRoot(document.getElementById('root'));
+            root.render(<App />);
     </script>
 </body>
 </html>
