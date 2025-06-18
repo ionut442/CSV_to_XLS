@@ -41,7 +41,28 @@ def find_csv_files(directory: Path) -> List[Path]:
 
 def read_csv_with_vietnamese_support(file_path: Path) -> pd.DataFrame:
     """Read CSV file with proper Vietnamese character support."""
-    encodings = ['utf-8-sig', 'utf-8', 'cp1252', 'latin1']
+    # Check for BOM to detect UTF-16 encoding
+    with open(file_path, 'rb') as f:
+        first_bytes = f.read(4)
+    
+    # Detect UTF-16 BOM patterns
+    if first_bytes.startswith(b'\xff\xfe'):
+        # UTF-16 LE BOM
+        primary_encodings = ['utf-16-le', 'utf-16']
+    elif first_bytes.startswith(b'\xfe\xff'):
+        # UTF-16 BE BOM  
+        primary_encodings = ['utf-16-be', 'utf-16']
+    elif first_bytes.startswith(b'\xef\xbb\xbf'):
+        # UTF-8 BOM
+        primary_encodings = ['utf-8-sig', 'utf-8']
+    else:
+        # No BOM detected, try common encodings
+        primary_encodings = ['utf-8-sig', 'utf-8', 'cp1252', 'latin1']
+    
+    # Try all encodings including fallbacks
+    all_encodings = primary_encodings + ['utf-16', 'utf-16-le', 'utf-16-be', 'utf-8-sig', 'utf-8', 'cp1252', 'latin1']
+    # Remove duplicates while preserving order
+    encodings = list(dict.fromkeys(all_encodings))
     
     for encoding in encodings:
         try:
@@ -51,35 +72,21 @@ def read_csv_with_vietnamese_support(file_path: Path) -> pd.DataFrame:
                 encoding=encoding,
                 on_bad_lines='skip',  # Skip malformed lines
                 engine='python',     # Use Python engine for better error handling
-                sep=',',             # Explicitly set separator
+                sep=None,            # Auto-detect separator (important for UTF-16)
                 quotechar='"',       # Handle quoted fields
                 skipinitialspace=True # Skip spaces after delimiter
             )
             
             # Check if we got any data
             if not df.empty:
+                # Clean column names to remove any remaining BOM or control characters
+                df.columns = df.columns.str.replace('\ufeff', '').str.replace('\x00', '').str.strip()
                 logger.info(f"Successfully read {file_path} with encoding {encoding}, shape: {df.shape}")
                 return df
             
         except (UnicodeDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             logger.warning(f"Failed to read {file_path} with encoding {encoding}: {str(e)}")
             continue
-    
-    # If all encodings fail, try one more time with more permissive settings
-    try:
-        df = pd.read_csv(
-            file_path,
-            encoding='utf-8-sig',
-            on_bad_lines='skip',
-            engine='python',
-            sep=None,  # Let pandas auto-detect separator
-            header=0
-        )
-        if not df.empty:
-            logger.info(f"Successfully read {file_path} with auto-detection, shape: {df.shape}")
-            return df
-    except Exception as e:
-        logger.error(f"Final attempt failed for {file_path}: {str(e)}")
     
     # Return empty DataFrame if all attempts fail
     logger.error(f"Could not read {file_path} with any method")
@@ -103,8 +110,8 @@ def merge_csv_files(csv_files: List[Path]) -> pd.DataFrame:
                 logger.warning(f"Empty or unreadable CSV file: {csv_file}")
                 continue
             
-            # Clean column names (remove extra spaces, etc.)
-            df.columns = df.columns.str.strip()
+            # Clean column names (remove extra spaces, BOM, null chars, etc.)
+            df.columns = df.columns.str.replace('\ufeff', '').str.replace('\x00', '').str.strip()
             
             # Check if headers match (for first file, set as reference)
             if header_reference is None:
