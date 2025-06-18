@@ -1,0 +1,33 @@
+modules = ["python-3.11"]
+
+[nix]
+channel = "stable-24_05"
+packages = ["glibcLocales"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "CSV to Excel Converter"
+
+[[workflows.workflow]]
+name = "CSV to Excel Converter"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pip install fastapi uvicorn pandas openpyxl python-multipart && python main.py"
+waitForPort = 8000
+
+[deployment]
+run = ["sh", "-c", "pip install fastapi uvicorn pandas openpyxl python-multipart && python main.py"]
+
+[[ports]]
+localPort = 8000
+externalPort = 80

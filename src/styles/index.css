@@ -1,0 +1,192 @@
+/* Custom styles for the CSV to Excel Converter */
+
+/* Smooth transitions for all interactive elements */
+* {
+    transition: all 0.2s ease-in-out;
+}
+
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* Custom loading animation */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Custom file upload styling */
+.file-upload-zone {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    border: 2px dashed #cbd5e0;
+    transition: all 0.3s ease;
+}
+
+.file-upload-zone:hover {
+    border-color: #4299e1;
+    background: linear-gradient(135deg, #ebf8ff 0%, #bee3f8 100%);
+}
+
+.file-upload-zone.drag-over {
+    border-color: #3182ce;
+    background: linear-gradient(135deg, #dbeafe 0%, #93c5fd 100%);
+    transform: scale(1.02);
+}
+
+/* Success state styling */
+.success-state {
+    background: linear-gradient(135deg, #f0fff4 0%, #c6f6d5 100%);
+}
+
+/* Error state styling */
+.error-state {
+    background: linear-gradient(135deg, #fef5e7 0%, #fed7aa 100%);
+}
+
+/* Processing state styling */
+.processing-state {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+}
+
+/* Custom button hover effects */
+.btn-primary {
+    background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+    box-shadow: 0 4px 6px -1px rgba(66, 153, 225, 0.3);
+}
+
+.btn-primary:hover {
+    box-shadow: 0 10px 15px -3px rgba(66, 153, 225, 0.4);
+    transform: translateY(-1px);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+    box-shadow: 0 4px 6px -1px rgba(72, 187, 120, 0.3);
+}
+
+.btn-success:hover {
+    box-shadow: 0 10px 15px -3px rgba(72, 187, 120, 0.4);
+    transform: translateY(-1px);
+}
+
+/* Icon styling */
+.feather {
+    stroke-width: 2;
+    stroke: currentColor;
+    fill: none;
+}
+
+/* Responsive design improvements */
+@media (max-width: 640px) {
+    .file-upload-zone {
+        padding: 1.5rem;
+    }
+    
+    .btn-group {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .btn-group button {
+        width: 100%;
+    }
+}
+
+/* Focus states for accessibility */
+button:focus,
+input:focus {
+    outline: 2px solid #4299e1;
+    outline-offset: 2px;
+}
+
+/* Status message animations */
+.status-enter {
+    opacity: 0;
+    transform: translateY(-10px);
+}
+
+.status-enter-active {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 300ms, transform 300ms;
+}
+
+.status-message {
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.9);
+}
+
+/* Progress bar styling */
+.progress-bar {
+    background: linear-gradient(90deg, #4299e1 0%, #3182ce 50%, #2b77cb 100%);
+    background-size: 200% 100%;
+    animation: gradient-shift 2s ease-in-out infinite;
+}
+
+@keyframes gradient-shift {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* Card shadow improvements */
+.card {
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+.card:hover {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* File type indicators */
+.file-type-csv::before {
+    content: "📊 ";
+}
+
+.file-type-excel::before {
+    content: "📈 ";
+}
+
+.file-type-zip::before {
+    content: "📦 ";
+}
+
+/* Utility classes */
+.text-gradient {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.border-gradient {
+    border: 2px solid transparent;
+    background: linear-gradient(white, white), linear-gradient(135deg, #667eea, #764ba2);
+    background-clip: padding-box, border-box;
+}
